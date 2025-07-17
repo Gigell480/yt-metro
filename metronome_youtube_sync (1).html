@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Synced Metronome</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    #metronome-visual {
+      width: 50px;
+      height: 50px;
+      margin: 20px auto;
+      border-radius: 50%;
+      background-color: gray;
+      transition: background-color 0.1s;
+    }
+    .active {
+      background-color: red;
+    }
+    input {
+      padding: 8px;
+      margin: 8px;
+      width: 300px;
+    }
+  </style>
+</head>
+<body>
+  <h1>YouTube Synced Metronome</h1>
+
+  <div>
+    <label for="youtubeUrl">YouTube Link:</label><br>
+    <input type="text" id="youtubeUrl" placeholder="Paste YouTube video link here" />
+    <button id="loadVideoButton">Load Video</button>
+  </div>
+
+  <div id="player"></div>
+
+  <div>
+    <label for="bpmInput">BPM:</label>
+    <input type="number" id="bpmInput" value="120" min="30" max="300">
+  </div>
+
+  <button id="startButton">Start</button>
+  <button id="stopButton">Stop</button>
+
+  <div id="metronome-visual"></div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    let player;
+    let bpm = 120;
+    let isRunning = false;
+    let nextNoteTime = 0.0;
+    let timerID;
+    const visual = document.getElementById("metronome-visual");
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Create player dynamically
+    function loadYouTubeVideo(videoId) {
+      if (player) {
+        player.loadVideoById(videoId);
+        return;
+      }
+      player = new YT.Player("player", {
+		height: "360",
+		width: "640",
+		videoId: videoId,
+		playerVars: {
+			origin: window.location.origin
+		},
+		events: {
+          onReady: () => console.log("Player ready"),
+        },
+      });
+    }
+
+    function extractVideoId(url) {
+      const regExp = /^.*(?:youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+      const match = url.match(regExp);
+      return match && match[1].length === 11 ? match[1] : null;
+    }
+
+    document.getElementById("loadVideoButton").addEventListener("click", () => {
+      const url = document.getElementById("youtubeUrl").value;
+      const videoId = extractVideoId(url);
+      if (videoId) {
+        loadYouTubeVideo(videoId);
+      } else {
+        alert("Invalid YouTube URL");
+      }
+    });
+
+    function playClick() {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.05);
+      visual.classList.add("active");
+      setTimeout(() => visual.classList.remove("active"), 100);
+    }
+
+    function scheduler() {
+      while (nextNoteTime < audioCtx.currentTime + 0.1) {
+        playClick();
+        nextNoteTime += 60.0 / bpm;
+      }
+      timerID = setTimeout(scheduler, 25);
+    }
+
+    function startMetronome() {
+      if (!isRunning) {
+        nextNoteTime = audioCtx.currentTime;
+        scheduler();
+        isRunning = true;
+      }
+    }
+
+    function stopMetronome() {
+      clearTimeout(timerID);
+      isRunning = false;
+    }
+
+    document.getElementById("bpmInput").addEventListener("change", (e) => {
+      bpm = parseInt(e.target.value, 10);
+    });
+
+    document.getElementById("startButton").addEventListener("click", () => {
+      bpm = parseInt(document.getElementById("bpmInput").value, 10);
+      if (player) {
+        player.seekTo(0);
+        player.playVideo();
+        startMetronome();
+      }
+    });
+
+    document.getElementById("stopButton").addEventListener("click", () => {
+      if (player) player.pauseVideo();
+      stopMetronome();
+    });
+  </script>
+</body>
+</html>
